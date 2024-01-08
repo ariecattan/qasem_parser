@@ -11,6 +11,16 @@ from abc import ABC
 TokenizedSentence = List[str]
 UntokenizedSentence = str
 
+def _clean_question(raw_question: str) -> str:
+    raw = raw_question.replace("_", "")
+
+    splits = [s.strip() for s in raw.split() if s.strip()]
+    if splits[-1] == "?":
+        splits = splits[:-1]
+    clean_question = " ".join(splits)
+    if not clean_question.endswith("?"):
+        clean_question += "?"
+    return clean_question
 
 @dataclass(frozen=True)
 class Predicate:
@@ -27,12 +37,16 @@ class Predicate:
 @dataclass(frozen=True)
 class QasemArgument:
     text: str
-    question: str
+    raw_question: str
     start_token: int
     end_token: int
     verb_token_id: int # token id of the verb in the question 
     role: Optional[str] = None
     
+    @property
+    def question(self) -> str:
+        clean_question = _clean_question(self.raw_question)
+        return clean_question
 
     def __repr__(self):
         # The fox (R0: who jumped)

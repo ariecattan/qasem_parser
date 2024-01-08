@@ -90,7 +90,7 @@ class T2TQasemArgumentParser:
     _PREDICATE_START_TOKEN = "<extra_id_0>"
     _PREDICATE_END_TOKEN = "<extra_id_1>"
     _QA_SEPARATOR = "<extra_id_2>"
-    _ANS_SEPARATOR = "<extra_id_3>"
+    _ANSWER_SEPARATOR = "<extra_id_3>"
     _PARSE_PREFIX_TOKENS = ["Generate",  "QA",  "pairs:"]
 
     def __init__(self,
@@ -98,7 +98,11 @@ class T2TQasemArgumentParser:
                  tokenizer: PreTrainedTokenizerBase,
                  batch_size=_DEFAULT_BATCH_SIZE,
                  num_beams=_DEFAULT_NUM_BEAMS,
-                 max_length=_DEFAULT_MAX_LENGTH
+                 max_length=_DEFAULT_MAX_LENGTH,
+                 predicate_start_token=_PREDICATE_START_TOKEN,
+                 predicate_end_token=_PREDICATE_END_TOKEN,
+                 qa_separator=_QA_SEPARATOR,
+                 answer_separator=_ANSWER_SEPARATOR,
     ):
         """
 
@@ -107,33 +111,28 @@ class T2TQasemArgumentParser:
         :param batch_size: The number of examples to process concurrently in a batch.
         :param num_beams: The number of beams in beam-search to use in decoding.
         :param max_length: Maximum length of the generated output Q&A pairs.
+        :param predicate_start_token: a marker token to designate the predicate
+        :param predicate_end_token: a marker token to designate the predicate
+        :param qa_separator: a marker token to distinguish different QA pairs
+        :param ansewr_separator: a marker token to distinguish different answers within a QA pair.
         """
         self.model = model.eval()
         self.tokenizer = tokenizer
         self.batch_size = batch_size
         self.num_beams = num_beams
         self.max_length = max_length
+        self.predicate_start_end_markers = predicate_start_token, predicate_end_token
+        self.qa_separator = qa_separator
+        self.answer_separator = answer_separator
 
     def __call__(self, *args, **kwargs):
         return self.predict(*args, **kwargs)
 
-    @staticmethod
-    def hack_unknown_tokens(tokens: List[str]):
-        # The default T5 tokenizer cannot handle the ` token that is often found
-        # in quotes in some types of preprocessed text and academic datasets.
-        # Instead it replaces it with an <UNK> token.
-        # Since this case is relatively common, we handle it here.
-        hacked_tokens = [
-            token if token != "``" else '"'
-            for token in tokens
-        ]
-        return hacked_tokens
-
     @classmethod
-    def from_pretrained(cls, path_or_model_name: str, **kwargs):
+    def from_pretrained(cls, path_or_model_name: str, device: str = None, **kwargs):
         tokenizer = AutoTokenizer.from_pretrained(path_or_model_name)
         model = AutoModelForSeq2SeqLM.from_pretrained(path_or_model_name)
-        device = get_device(**kwargs)
+        device = get_device(device=device)
         model = model.to(device)
         return cls(model, tokenizer, **kwargs)
 
@@ -179,11 +178,11 @@ class T2TQasemArgumentParser:
         ]
         return post_processed
 
-    def _parse_question(self, question: str) -> Tuple[str, str]:
-        slots = get_slots(question)
+    def _parse_question(self, raw_question: str) -> Tuple[str, str]:
+        slots = get_slots(raw_question)
         if slots is None: # filter out QAs without slots
-            return None, None, None
-        role = get_role(question)
+            return None, None
+        role = get_role(raw_question)
         if role:
             # let's not use qanom.SemanticRole enum
             # it is coupled with prepositions in a specific dataset
@@ -192,15 +191,12 @@ class T2TQasemArgumentParser:
             role = role.name
 
         slots["verb"] = slots["verb"].replace("_", "")
-        clean_question = question.replace("_", "")
-        toks = [t.strip() for t in clean_question.split() if t.strip()]
-        verb_token_id = find_answer_idx_with_fallback(toks, slots["verb"])
-        if toks[-1] == "?":
-            clean_question = " ".join(toks[:-1]) + "?"
-        else:
-            clean_question = " ".join(toks)
-        return clean_question, role, verb_token_id[0]
 
+        clean_question = [t.strip() for t in raw_question.split() if t.strip() and t.strip() != "_"]
+        verb_token_id = find_answer_idx_with_fallback(clean_question, slots["verb"])
+        
+        return role, verb_token_id
+    
     def _postprocess(self, decoded: str, tokens: TokenizedSentence):
         """
         Processes the generated output by a Text-to-Text model
@@ -219,19 +215,15 @@ class T2TQasemArgumentParser:
             self.tokenizer.pad_token, "").replace(
             self.tokenizer.eos_token, "").strip(
         )
-        qa_pairs = decoded2.split(self._QA_SEPARATOR)
+        qa_pairs = decoded2.split(self.qa_separator)
         for raw_qa_pair in qa_pairs:
             qa_splits = raw_qa_pair.split("?", maxsplit=1)
             if len(qa_splits) <= 1:
                 continue
-            question = qa_splits[0].strip() + "?"
-            question, role, verb_token_id = self._parse_question(question)
-            if question is None:
-                continue
-            # this is the not a good choice since
-            # a ";" sign may be part of an answer..
-            # but that's how the model was trained :-(
-            answers = qa_splits[1].split(self._ANS_SEPARATOR)
+            raw_question = qa_splits[0].strip() + "?"
+            role, verb_token_id = self._parse_question(raw_question)
+            
+            answers = qa_splits[1].split(self.answer_separator)
             answers = [ans.strip() for ans in answers]
             for answer in answers:
                 # try to locate the answer in the original text
@@ -239,10 +231,11 @@ class T2TQasemArgumentParser:
                 if answer_start is None:
                     continue
                 arg_text = " ".join(tokens[answer_start: answer_end])
-                arg = QasemArgument(arg_text, question, answer_start, answer_end, verb_token_id, role)
+                arg = QasemArgument(arg_text, raw_question, answer_start, answer_end, verb_token_id, role)
                 arguments.append(arg)
 
         return arguments
+
 
     def predict(self, items: List[ArgInputExample]) -> List[QasemFrame]:
         if not isinstance(items[0].sentence, List):
