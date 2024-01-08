@@ -86,11 +86,11 @@ _DEFAULT_MAX_LENGTH = 256
 
 
 class T2TQasemArgumentParser:
-
     _PREDICATE_START_TOKEN = "<extra_id_0>"
     _PREDICATE_END_TOKEN = "<extra_id_1>"
     _QA_SEPARATOR = "<extra_id_2>"
     _ANSWER_SEPARATOR = "<extra_id_3>"
+
     _PARSE_PREFIX_TOKENS = ["Generate",  "QA",  "pairs:"]
 
     def __init__(self,
@@ -102,7 +102,7 @@ class T2TQasemArgumentParser:
                  predicate_start_token=_PREDICATE_START_TOKEN,
                  predicate_end_token=_PREDICATE_END_TOKEN,
                  qa_separator=_QA_SEPARATOR,
-                 answer_separator=_ANSWER_SEPARATOR,
+                 answer_separator=_ANSWER_SEPARATOR
     ):
         """
 
@@ -135,14 +135,12 @@ class T2TQasemArgumentParser:
         device = get_device(device=device)
         model = model.to(device)
         return cls(model, tokenizer, **kwargs)
-
-    @staticmethod
-    def _prepare_prompt(sample: ArgInputExample):
+    
+    def _prepare_prompt(self, sample: ArgInputExample):
         # prompt:
         # "Generate QA pairs: The fox <extra_id_0> jumped <extra_id_0> over the fence"
         tokens = sample.sentence
         predicate_index = sample.predicate.index
-        # hacked_tokens = T2TQasemArgumentParser.hack_unknown_tokens(tokens)
 
         # Prefix that starts the prompt (our T5-model was trained with this prefix)
         new_tokens = T2TQasemArgumentParser._PARSE_PREFIX_TOKENS[:]
@@ -150,9 +148,10 @@ class T2TQasemArgumentParser:
         new_tokens.extend(tokens[:])
         # put the predicate token between two special tokens marking start and end.
         # The model is trained without spaces between the special tokens and the predicate
-        marked_predicate = "".join([T2TQasemArgumentParser._PREDICATE_START_TOKEN,
+        pred_start_marker, pred_end_marker = self.predicate_start_end_markers
+        marked_predicate = "".join([pred_start_marker,
                                     tokens[predicate_index],
-                                    T2TQasemArgumentParser._PREDICATE_END_TOKEN])
+                                    pred_end_marker])
         new_tokens.append(marked_predicate)
         # put the rest of the sentence
         new_tokens.extend(tokens[(predicate_index + 1):])
