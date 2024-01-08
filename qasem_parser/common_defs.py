@@ -11,16 +11,6 @@ from abc import ABC
 TokenizedSentence = List[str]
 UntokenizedSentence = str
 
-def _clean_question(raw_question: str) -> str:
-    raw = raw_question.replace("_", "")
-
-    splits = [s.strip() for s in raw.split() if s.strip()]
-    if splits[-1] == "?":
-        splits = splits[:-1]
-    clean_question = " ".join(splits)
-    if not clean_question.endswith("?"):
-        clean_question += "?"
-    return clean_question
 
 def _clean_question(raw_question: str) -> str:
     raw = raw_question.replace("_", "")
