@@ -195,7 +195,7 @@ class T2TQasemArgumentParser:
         verb_token_id = find_answer_idx_with_fallback(clean_question, slots["verb"])
         
         return role, verb_token_id
-    
+
     def _postprocess(self, decoded: str, tokens: TokenizedSentence):
         """
         Processes the generated output by a Text-to-Text model
@@ -221,7 +221,6 @@ class T2TQasemArgumentParser:
                 continue
             raw_question = qa_splits[0].strip() + "?"
             role, verb_token_id = self._parse_question(raw_question)
-            
             answers = qa_splits[1].split(self.answer_separator)
             answers = [ans.strip() for ans in answers]
             for answer in answers:

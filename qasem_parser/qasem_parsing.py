@@ -47,6 +47,9 @@ class QasemParser:
     _ARG_PARSER_PARAMETERS = list(inspect.signature(T2TQasemArgumentParser).parameters)
     _PRED_CLASSIFIER_PARAMETERS = list(inspect.signature(BertPredicateDetector).parameters)
 
+    _ARG_PARSER_PARAMETERS = list(inspect.signature(T2TQasemArgumentParser).parameters)
+    _PRED_CLASSIFIER_PARAMETERS = list(inspect.signature(BertPredicateDetector).parameters)
+
     @classmethod
     def from_pretrained(cls,
                         arg_parser_path: str,
