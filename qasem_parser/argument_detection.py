@@ -194,7 +194,7 @@ class T2TQasemArgumentParser:
         clean_question = [t.strip() for t in raw_question.split() if t.strip() and t.strip() != "_"]
         verb_token_id = find_answer_idx_with_fallback(clean_question, slots["verb"])
         
-        return role, verb_token_id
+        return role, verb_token_id[0]
 
     def _postprocess(self, decoded: str, tokens: TokenizedSentence):
         """
