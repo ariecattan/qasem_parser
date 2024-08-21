@@ -176,17 +176,22 @@ class LocUnfaith:
     if "labels" in self.df_sentences.columns: # in CLIFF
       labels = self.df_sentences.iloc[0]["labels"]
 
-    for i, token in enumerate(self.df_sentences.iloc[0]["spacy_summary"]):
-      tokens.append({
-        "id": i,
-        "text": token.text,
-        "lemma": token.lemma_,
-        "spans": token2span[i],
-        "class": "token" if len(token2span[i]) == 0 else "mention",
-        "label": labels[i]
-      })
+    
+    for sent_id, sent in enumerate(self.df_sentences.iloc[0]["spacy_summary"].sents):
+      for token in sent:
+        tokens.append({
+          "id": token.i,
+          "sent_id": sent_id,
+          "text": token.text,
+          "lemma": token.lemma_,
+          "spans": token2span[token.i],
+          "class": "token" if len(token2span[token.i]) == 0 else "mention", 
+          "label": labels[token.i]
+        })
+    
     
     return tokens
+  
 
   def export_summary_data(self):
     """
